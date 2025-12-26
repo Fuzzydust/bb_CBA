@@ -5,13 +5,12 @@ import CardCreator from './components/CardCreator';
 import CardCollection from './components/CardCollection';
 import BattleMatchmaking from './components/BattleMatchmaking';
 import BattleArena from './components/BattleArena';
-import { ErrorBoundary } from './components/ErrorBoundary';
 import { Swords, Plus, Library, LogOut } from 'lucide-react';
 
 type View = 'collection' | 'create' | 'battle' | 'arena';
 
 function GameContent() {
-  const { user, loading, signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [view, setView] = useState<View>('collection');
   const [battleId, setBattleId] = useState<string | null>(null);
   const [refreshCards, setRefreshCards] = useState(0);
@@ -30,17 +29,6 @@ function GameContent() {
     setBattleId(null);
     setView('battle');
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-amber-500 mx-auto mb-4"></div>
-          <p className="text-slate-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
 
   if (!user) {
     return <Auth />;
@@ -134,11 +122,9 @@ function GameContent() {
 
 function App() {
   return (
-    <ErrorBoundary>
-      <AuthProvider>
-        <GameContent />
-      </AuthProvider>
-    </ErrorBoundary>
+    <AuthProvider>
+      <GameContent />
+    </AuthProvider>
   );
 }
 
