@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase, Card, Battle, BattleParticipant } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import CardCollection from './CardCollection';
@@ -13,6 +13,11 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
   const [selectedCard, setSelectedCard] = useState<Card | null>(null);
   const [searching, setSearching] = useState(false);
   const [waitingBattleId, setWaitingBattleId] = useState<string | null>(null);
+  const waitingBattleIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    waitingBattleIdRef.current = waitingBattleId;
+  }, [waitingBattleId]);
 
   useEffect(() => {
     if (!searching || !waitingBattleId) return;
@@ -30,6 +35,7 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
         (payload) => {
           const battle = payload.new as Battle;
           if (battle.status === 'active') {
+            waitingBattleIdRef.current = null;
             setSearching(false);
             setWaitingBattleId(null);
             onBattleStart(battle.id);
@@ -40,15 +46,20 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
 
     return () => {
       supabase.removeChannel(channel);
-      if (waitingBattleId) {
+    };
+  }, [searching, waitingBattleId, onBattleStart]);
+
+  useEffect(() => {
+    return () => {
+      if (waitingBattleIdRef.current) {
         supabase
           .from('battles')
           .delete()
-          .eq('id', waitingBattleId)
+          .eq('id', waitingBattleIdRef.current)
           .eq('status', 'waiting');
       }
     };
-  }, [searching, waitingBattleId, onBattleStart]);
+  }, []);
 
   const findOrCreateBattle = async () => {
     if (!selectedCard || !user) return;
@@ -116,6 +127,7 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
           .update({ status: 'active', current_turn: firstTurn })
           .eq('id', waitingBattles.id);
 
+        waitingBattleIdRef.current = null;
         setSearching(false);
         onBattleStart(waitingBattles.id);
       } else {
@@ -162,6 +174,7 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
     }
     setSearching(false);
     setWaitingBattleId(null);
+    waitingBattleIdRef.current = null;
   };
 
   if (searching) {
