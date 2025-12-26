@@ -12,5 +12,42 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      setTimeout(() => {
+        const root = document.getElementById('root');
+        if (!root || !root.innerHTML) {
+          document.body.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(to bottom right, #0f172a, #1e293b, #0f172a); font-family: system-ui, -apple-system, sans-serif;">
+              <div style="max-width: 600px; padding: 2rem; background: #1e293b; border-radius: 1rem; border: 1px solid #334155; margin: 1rem;">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                  <div style="background: rgba(239, 68, 68, 0.1); padding: 0.5rem; border-radius: 0.5rem;">
+                    <svg style="width: 1.5rem; height: 1.5rem; color: #ef4444;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                  </div>
+                  <h1 style="font-size: 1.5rem; font-weight: bold; color: white; margin: 0;">Application Error</h1>
+                </div>
+                <p style="color: #cbd5e1; margin-bottom: 1rem;">
+                  The application failed to load. This is likely due to missing environment variables or a build issue.
+                </p>
+                <div style="background: #0f172a; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem;">
+                  <p style="color: #f87171; font-family: monospace; font-size: 0.875rem; margin: 0;">
+                    Check the browser console for more details.
+                  </p>
+                </div>
+                <div style="color: #94a3b8; font-size: 0.875rem; line-height: 1.5;">
+                  <p style="margin: 0 0 0.5rem 0;"><strong>For Netlify:</strong> Add environment variables in Site settings → Environment variables</p>
+                  <p style="margin: 0;"><strong>For GitHub Pages:</strong> Environment variables are configured in the workflow file (.github/workflows/static.yml)</p>
+                </div>
+                <button onclick="window.location.reload()" style="width: 100%; background: #f59e0b; color: #0f172a; font-weight: bold; padding: 0.75rem 1rem; border-radius: 0.5rem; border: none; cursor: pointer; margin-top: 1rem; font-size: 1rem;">
+                  Reload Page
+                </button>
+              </div>
+            </div>
+          `;
+          console.error('Application failed to render. Check Supabase environment variables.');
+        }
+      }, 2000);
+    </script>
   </body>
 </html>
