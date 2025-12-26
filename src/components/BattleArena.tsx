@@ -37,7 +37,8 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           table: 'battles',
           filter: `id=eq.${battleId}`,
         },
-        () => {
+        (payload) => {
+          console.log('Battle update received:', payload);
           fetchBattleData();
         }
       )
@@ -49,31 +50,49 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           table: 'battle_participants',
           filter: `battle_id=eq.${battleId}`,
         },
-        () => {
+        (payload) => {
+          console.log('Participant update received:', payload);
           fetchBattleData();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('Realtime subscription status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [battleId]);
+  }, [battleId, user?.id]);
 
   const fetchBattleData = async () => {
-    const { data: battleData } = await supabase
-      .from('battles')
-      .select('*')
-      .eq('id', battleId)
-      .maybeSingle();
+    try {
+      const { data: battleData, error: battleError } = await supabase
+        .from('battles')
+        .select('*')
+        .eq('id', battleId)
+        .maybeSingle();
 
-    if (battleData) {
+      if (battleError) {
+        console.error('Error fetching battle:', battleError);
+        return;
+      }
+
+      if (!battleData) {
+        console.error('Battle not found');
+        return;
+      }
+
       setBattle(battleData);
 
-      const { data: participantsData } = await supabase
+      const { data: participantsData, error: participantsError } = await supabase
         .from('battle_participants')
         .select('*')
         .eq('battle_id', battleId);
+
+      if (participantsError) {
+        console.error('Error fetching participants:', participantsError);
+        return;
+      }
 
       if (participantsData) {
         const participantsWithCards = await Promise.all(
@@ -99,6 +118,8 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
         const myParticipantData = validParticipants.find(p => p.user_id === user?.id);
         setIsMyTurn(battleData.current_turn === myParticipantData?.id);
       }
+    } catch (error) {
+      console.error('Error in fetchBattleData:', error);
     }
   };
 
