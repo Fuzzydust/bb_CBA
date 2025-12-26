@@ -263,7 +263,8 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
         }
       }
 
-      console.log('Move completed, waiting for realtime updates...');
+      console.log('Move completed, fetching updated battle data...');
+      await fetchBattleData();
     } catch (error) {
       console.error('Error performing action:', error);
     } finally {
