@@ -309,6 +309,7 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
         .insert({
           battle_id: battleId,
           participant_id: myParticipant.id,
+          user_id: user?.id,
           action_type: actionType,
           damage_dealt: damage,
           turn_number: nextTurnNumber,
