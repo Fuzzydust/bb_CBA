@@ -25,6 +25,7 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
   const opponentParticipant = participants.find(p => p.user_id !== user?.id);
 
   useEffect(() => {
+    console.log(`[${user?.email}] BattleArena mounted for battle ${battleId}`);
     fetchBattleData();
 
     const channel = supabase
@@ -38,7 +39,7 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           filter: `id=eq.${battleId}`,
         },
         (payload) => {
-          console.log('Battle update received:', payload);
+          console.log(`[${user?.email}] Battle update received:`, payload);
           fetchBattleData();
         }
       )
@@ -51,7 +52,7 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           filter: `battle_id=eq.${battleId}`,
         },
         (payload) => {
-          console.log('Participant update received:', payload);
+          console.log(`[${user?.email}] Participant update received:`, payload);
           fetchBattleData();
         }
       )
@@ -64,21 +65,23 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           filter: `battle_id=eq.${battleId}`,
         },
         (payload) => {
-          console.log('Turn insert received:', payload);
+          console.log(`[${user?.email}] Turn insert received:`, payload);
           fetchBattleData();
         }
       )
       .subscribe((status) => {
-        console.log('Realtime subscription status:', status);
+        console.log(`[${user?.email}] Realtime subscription status:`, status);
       });
 
     return () => {
+      console.log(`[${user?.email}] BattleArena unmounting, removing channel`);
       supabase.removeChannel(channel);
     };
   }, [battleId, user?.id]);
 
   const fetchBattleData = async () => {
     try {
+      console.log(`[${user?.email}] fetchBattleData called`);
       const { data: battleData, error: battleError } = await supabase
         .from('battles')
         .select('*')
@@ -86,15 +89,16 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
         .maybeSingle();
 
       if (battleError) {
-        console.error('Error fetching battle:', battleError);
+        console.error(`[${user?.email}] Error fetching battle:`, battleError);
         return;
       }
 
       if (!battleData) {
-        console.error('Battle not found');
+        console.error(`[${user?.email}] Battle not found`);
         return;
       }
 
+      console.log(`[${user?.email}] Battle data fetched:`, battleData);
       setBattle(battleData);
 
       const { data: participantsData, error: participantsError } = await supabase
@@ -126,10 +130,13 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           return;
         }
 
+        console.log(`[${user?.email}] Setting participants:`, validParticipants);
         setParticipants(validParticipants);
 
         const myParticipantData = validParticipants.find(p => p.user_id === user?.id);
-        setIsMyTurn(battleData.current_turn === myParticipantData?.id);
+        const isMyTurnNow = battleData.current_turn === myParticipantData?.id;
+        console.log(`[${user?.email}] Is my turn:`, isMyTurnNow, 'current_turn:', battleData.current_turn, 'my participant id:', myParticipantData?.id);
+        setIsMyTurn(isMyTurnNow);
 
         // Fetch battle turns to rebuild action log
         const { data: turnsData } = await supabase
@@ -137,6 +144,8 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           .select('*, battle_participants(card_id, cards(name, special_ability))')
           .eq('battle_id', battleId)
           .order('turn_number', { ascending: false });
+
+        console.log(`[${user?.email}] Turns data fetched:`, turnsData);
 
         if (turnsData) {
           const logs = turnsData.map((turn: any) => {
@@ -153,11 +162,12 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
             return '';
           }).filter(Boolean);
 
+          console.log(`[${user?.email}] Action logs generated:`, logs);
           setActionLog(logs);
         }
       }
     } catch (error) {
-      console.error('Error in fetchBattleData:', error);
+      console.error(`[${user?.email}] Error in fetchBattleData:`, error);
     }
   };
 
