@@ -83,13 +83,20 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
               .select('*')
               .eq('id', p.card_id)
               .maybeSingle();
-            return { ...p, card: card! };
+            return { ...p, card };
           })
         );
 
-        setParticipants(participantsWithCards);
+        const validParticipants = participantsWithCards.filter(p => p.card !== null) as ParticipantWithCard[];
 
-        const myParticipantData = participantsWithCards.find(p => p.user_id === user?.id);
+        if (validParticipants.length < 2) {
+          console.error('Battle participants missing valid cards');
+          return;
+        }
+
+        setParticipants(validParticipants);
+
+        const myParticipantData = validParticipants.find(p => p.user_id === user?.id);
         setIsMyTurn(battleData.current_turn === myParticipantData?.id);
       }
     }
