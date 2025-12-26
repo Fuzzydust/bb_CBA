@@ -46,24 +46,40 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
   const findOrCreateBattle = async () => {
     if (!selectedCard || !user) return;
 
-    setSearching(true);
+    try {
+      setSearching(true);
 
-    const { data: waitingBattles } = await supabase
-      .from('battles')
-      .select('*, battle_participants(*)')
-      .eq('status', 'waiting')
-      .limit(1)
-      .maybeSingle();
+      const { data: waitingBattles, error: fetchError } = await supabase
+        .from('battles')
+        .select('id, status, battle_participants(id, user_id, card_id)')
+        .eq('status', 'waiting')
+        .limit(10);
 
-    if (waitingBattles) {
-      const participants = waitingBattles.battle_participants as BattleParticipant[];
-      const existingParticipant = participants[0];
+      if (fetchError) {
+        console.error('Error fetching battles:', fetchError);
+        setSearching(false);
+        return;
+      }
 
-      if (existingParticipant && existingParticipant.user_id !== user.id) {
+      let suitableBattle = null;
+      if (waitingBattles && waitingBattles.length > 0) {
+        for (const battle of waitingBattles) {
+          const participants = battle.battle_participants as BattleParticipant[];
+          if (participants.length === 1 && participants[0].user_id !== user.id) {
+            suitableBattle = battle;
+            break;
+          }
+        }
+      }
+
+      if (suitableBattle) {
+        const participants = suitableBattle.battle_participants as BattleParticipant[];
+        const existingParticipant = participants[0];
+
         const { error: participantError } = await supabase
           .from('battle_participants')
           .insert({
-            battle_id: waitingBattles.id,
+            battle_id: suitableBattle.id,
             user_id: user.id,
             card_id: selectedCard.id,
             current_hp: selectedCard.hp,
@@ -71,6 +87,7 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
           });
 
         if (participantError) {
+          console.error('Error adding participant:', participantError);
           setSearching(false);
           return;
         }
@@ -93,7 +110,7 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
         const { data: newParticipants } = await supabase
           .from('battle_participants')
           .select('id')
-          .eq('battle_id', waitingBattles.id)
+          .eq('battle_id', suitableBattle.id)
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -103,45 +120,53 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
 
         const firstTurn = speeds[0].speed >= speeds[1].speed ? speeds[0].id : speeds[1].id;
 
-        await supabase
+        const { error: updateError } = await supabase
           .from('battles')
           .update({ status: 'active', current_turn: firstTurn })
-          .eq('id', waitingBattles.id);
+          .eq('id', suitableBattle.id);
+
+        if (updateError) {
+          console.error('Error updating battle:', updateError);
+          setSearching(false);
+          return;
+        }
 
         setSearching(false);
-        onBattleStart(waitingBattles.id);
+        onBattleStart(suitableBattle.id);
       } else {
-        setSearching(false);
-        findOrCreateBattle();
+        const { data: newBattle, error: battleError } = await supabase
+          .from('battles')
+          .insert({ status: 'waiting' })
+          .select()
+          .single();
+
+        if (battleError || !newBattle) {
+          console.error('Error creating battle:', battleError);
+          setSearching(false);
+          return;
+        }
+
+        const { error: participantError } = await supabase
+          .from('battle_participants')
+          .insert({
+            battle_id: newBattle.id,
+            user_id: user.id,
+            card_id: selectedCard.id,
+            current_hp: selectedCard.hp,
+            position: 1,
+          });
+
+        if (participantError) {
+          console.error('Error adding participant:', participantError);
+          setSearching(false);
+          return;
+        }
+
+        setWaitingBattleId(newBattle.id);
       }
-    } else {
-      const { data: newBattle, error: battleError } = await supabase
-        .from('battles')
-        .insert({ status: 'waiting' })
-        .select()
-        .single();
-
-      if (battleError || !newBattle) {
-        setSearching(false);
-        return;
-      }
-
-      const { error: participantError } = await supabase
-        .from('battle_participants')
-        .insert({
-          battle_id: newBattle.id,
-          user_id: user.id,
-          card_id: selectedCard.id,
-          current_hp: selectedCard.hp,
-          position: 1,
-        });
-
-      if (participantError) {
-        setSearching(false);
-        return;
-      }
-
-      setWaitingBattleId(newBattle.id);
+    } catch (error) {
+      console.error('Unexpected error in findOrCreateBattle:', error);
+      setSearching(false);
     }
   };
 
