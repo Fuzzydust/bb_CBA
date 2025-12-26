@@ -139,12 +139,15 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
         setIsMyTurn(isMyTurnNow);
 
         // Fetch battle turns to rebuild action log
-        const { data: turnsData } = await supabase
+        const { data: turnsData, error: turnsError } = await supabase
           .from('battle_turns')
           .select('*, battle_participants(card_id, cards(name, special_ability))')
           .eq('battle_id', battleId)
           .order('turn_number', { ascending: false });
 
+        if (turnsError) {
+          console.error(`[${user?.email}] Error fetching turns:`, turnsError);
+        }
         console.log(`[${user?.email}] Turns data fetched:`, turnsData);
 
         if (turnsData) {
