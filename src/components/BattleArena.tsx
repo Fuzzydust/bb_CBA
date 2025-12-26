@@ -154,108 +154,121 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
 
     setLoading(true);
 
-    let damage = 0;
-    let logMessage = '';
-    const hasAdvantage = checkTypeAdvantage(myParticipant, opponentParticipant);
+    try {
+      let damage = 0;
+      let logMessage = '';
+      const hasAdvantage = checkTypeAdvantage(myParticipant, opponentParticipant);
 
-    if (actionType === 'attack') {
-      damage = calculateDamage(myParticipant, opponentParticipant);
-      logMessage = `${myParticipant.card.name} attacks for ${damage} damage!`;
-      if (opponentParticipant.is_defending) {
-        logMessage += ' (Reduced by defense!)';
+      if (actionType === 'attack') {
+        damage = calculateDamage(myParticipant, opponentParticipant);
+        logMessage = `${myParticipant.card.name} attacks for ${damage} damage!`;
+        if (opponentParticipant.is_defending) {
+          logMessage += ' (Reduced by defense!)';
+        }
+        if (hasAdvantage) {
+          logMessage += ' Super effective!';
+        }
+
+        await supabase
+          .from('battle_participants')
+          .update({ is_defending: false })
+          .eq('id', myParticipant.id);
+
+        await supabase
+          .from('battle_participants')
+          .update({ is_defending: false })
+          .eq('id', opponentParticipant.id);
+      } else if (actionType === 'ability') {
+        if (myParticipant.has_used_ability) {
+          setLoading(false);
+          return;
+        }
+        damage = calculateDamage(myParticipant, opponentParticipant, true);
+        logMessage = `${myParticipant.card.name} uses ${myParticipant.card.special_ability} for ${damage} damage!`;
+        if (opponentParticipant.is_defending) {
+          logMessage += ' (Reduced by defense!)';
+        }
+        if (hasAdvantage) {
+          logMessage += ' Super effective!';
+        }
+
+        await supabase
+          .from('battle_participants')
+          .update({ has_used_ability: true, is_defending: false })
+          .eq('id', myParticipant.id);
+
+        await supabase
+          .from('battle_participants')
+          .update({ is_defending: false })
+          .eq('id', opponentParticipant.id);
+      } else if (actionType === 'defend') {
+        logMessage = `${myParticipant.card.name} takes a defensive stance!`;
+
+        await supabase
+          .from('battle_participants')
+          .update({ is_defending: true })
+          .eq('id', myParticipant.id);
       }
-      if (hasAdvantage) {
-        logMessage += ' Super effective!';
-      }
+
+      const newOpponentHp = Math.max(0, opponentParticipant.current_hp - damage);
 
       await supabase
         .from('battle_participants')
-        .update({ is_defending: false })
-        .eq('id', myParticipant.id);
-
-      await supabase
-        .from('battle_participants')
-        .update({ is_defending: false })
+        .update({ current_hp: newOpponentHp })
         .eq('id', opponentParticipant.id);
-    } else if (actionType === 'ability') {
-      if (myParticipant.has_used_ability) {
-        setLoading(false);
-        return;
-      }
-      damage = calculateDamage(myParticipant, opponentParticipant, true);
-      logMessage = `${myParticipant.card.name} uses ${myParticipant.card.special_ability} for ${damage} damage!`;
-      if (opponentParticipant.is_defending) {
-        logMessage += ' (Reduced by defense!)';
-      }
-      if (hasAdvantage) {
-        logMessage += ' Super effective!';
-      }
+
+      const { data: turnData } = await supabase
+        .from('battle_turns')
+        .select('turn_number')
+        .eq('battle_id', battleId)
+        .order('turn_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const nextTurnNumber = (turnData?.turn_number || 0) + 1;
 
       await supabase
-        .from('battle_participants')
-        .update({ has_used_ability: true, is_defending: false })
-        .eq('id', myParticipant.id);
+        .from('battle_turns')
+        .insert({
+          battle_id: battleId,
+          participant_id: myParticipant.id,
+          action_type: actionType,
+          damage_dealt: damage,
+          turn_number: nextTurnNumber,
+        });
 
-      await supabase
-        .from('battle_participants')
-        .update({ is_defending: false })
-        .eq('id', opponentParticipant.id);
-    } else if (actionType === 'defend') {
-      logMessage = `${myParticipant.card.name} takes a defensive stance!`;
+      setActionLog(prev => [logMessage, ...prev]);
 
-      await supabase
-        .from('battle_participants')
-        .update({ is_defending: true })
-        .eq('id', myParticipant.id);
+      if (newOpponentHp <= 0) {
+        const { error: battleUpdateError } = await supabase
+          .from('battles')
+          .update({
+            status: 'completed',
+            winner_id: user?.id,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', battleId);
+
+        if (battleUpdateError) {
+          console.error('Error updating battle status:', battleUpdateError);
+        }
+      } else {
+        const { error: turnUpdateError } = await supabase
+          .from('battles')
+          .update({ current_turn: opponentParticipant.id })
+          .eq('id', battleId);
+
+        if (turnUpdateError) {
+          console.error('Error updating turn:', turnUpdateError);
+        }
+      }
+
+      console.log('Move completed, waiting for realtime updates...');
+    } catch (error) {
+      console.error('Error performing action:', error);
+    } finally {
+      setLoading(false);
     }
-
-    const newOpponentHp = Math.max(0, opponentParticipant.current_hp - damage);
-
-    await supabase
-      .from('battle_participants')
-      .update({ current_hp: newOpponentHp })
-      .eq('id', opponentParticipant.id);
-
-    const { data: turnData } = await supabase
-      .from('battle_turns')
-      .select('turn_number')
-      .eq('battle_id', battleId)
-      .order('turn_number', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    const nextTurnNumber = (turnData?.turn_number || 0) + 1;
-
-    await supabase
-      .from('battle_turns')
-      .insert({
-        battle_id: battleId,
-        participant_id: myParticipant.id,
-        action_type: actionType,
-        damage_dealt: damage,
-        turn_number: nextTurnNumber,
-      });
-
-    setActionLog(prev => [logMessage, ...prev]);
-
-    if (newOpponentHp <= 0) {
-      await supabase
-        .from('battles')
-        .update({
-          status: 'completed',
-          winner_id: user?.id,
-          completed_at: new Date().toISOString(),
-        })
-        .eq('id', battleId);
-    } else {
-      await supabase
-        .from('battles')
-        .update({ current_turn: opponentParticipant.id })
-        .eq('id', battleId);
-    }
-
-    await fetchBattleData();
-    setLoading(false);
   };
 
   if (!battle || participants.length < 2) {
