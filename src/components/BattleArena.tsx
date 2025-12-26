@@ -32,7 +32,7 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'UPDATE',
           schema: 'public',
           table: 'battles',
           filter: `id=eq.${battleId}`,
@@ -45,13 +45,26 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'UPDATE',
           schema: 'public',
           table: 'battle_participants',
           filter: `battle_id=eq.${battleId}`,
         },
         (payload) => {
           console.log('Participant update received:', payload);
+          fetchBattleData();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'battle_turns',
+          filter: `battle_id=eq.${battleId}`,
+        },
+        (payload) => {
+          console.log('Turn insert received:', payload);
           fetchBattleData();
         }
       )
@@ -117,6 +130,31 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
 
         const myParticipantData = validParticipants.find(p => p.user_id === user?.id);
         setIsMyTurn(battleData.current_turn === myParticipantData?.id);
+
+        // Fetch battle turns to rebuild action log
+        const { data: turnsData } = await supabase
+          .from('battle_turns')
+          .select('*, battle_participants(card_id, cards(name, special_ability))')
+          .eq('battle_id', battleId)
+          .order('turn_number', { ascending: false });
+
+        if (turnsData) {
+          const logs = turnsData.map((turn: any) => {
+            const cardName = turn.battle_participants?.cards?.name || 'Unknown';
+            const abilityName = turn.battle_participants?.cards?.special_ability || '';
+
+            if (turn.action_type === 'attack') {
+              return `${cardName} attacks for ${turn.damage_dealt} damage!`;
+            } else if (turn.action_type === 'ability') {
+              return `${cardName} uses ${abilityName} for ${turn.damage_dealt} damage!`;
+            } else if (turn.action_type === 'defend') {
+              return `${cardName} takes a defensive stance!`;
+            }
+            return '';
+          }).filter(Boolean);
+
+          setActionLog(logs);
+        }
       }
     } catch (error) {
       console.error('Error in fetchBattleData:', error);
