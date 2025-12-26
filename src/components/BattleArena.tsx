@@ -29,7 +29,7 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
     fetchBattleData();
 
     const channel = supabase
-      .channel(`battle-${battleId}`)
+      .channel(`battle-${battleId}-${user?.id}`)
       .on(
         'postgres_changes',
         {
