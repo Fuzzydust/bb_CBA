@@ -62,16 +62,28 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
   }, []);
 
   const findOrCreateBattle = async () => {
-    if (!selectedCard || !user) return;
+    if (!selectedCard || !user) {
+      console.log('No card or user');
+      return;
+    }
 
+    console.log('Starting search...');
     setSearching(true);
 
-    const { data: waitingBattles } = await supabase
+    const { data: waitingBattles, error: searchError } = await supabase
       .from('battles')
       .select('*, battle_participants(*)')
       .eq('status', 'waiting')
       .limit(1)
       .maybeSingle();
+
+    if (searchError) {
+      console.error('Search error:', searchError);
+      setSearching(false);
+      return;
+    }
+
+    console.log('Waiting battles found:', waitingBattles);
 
     if (waitingBattles) {
       const participants = waitingBattles.battle_participants as BattleParticipant[];
@@ -135,6 +147,7 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
         findOrCreateBattle();
       }
     } else {
+      console.log('Creating new battle...');
       const { data: newBattle, error: battleError } = await supabase
         .from('battles')
         .insert({ status: 'waiting' })
@@ -142,9 +155,12 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
         .single();
 
       if (battleError || !newBattle) {
+        console.error('Battle creation error:', battleError);
         setSearching(false);
         return;
       }
+
+      console.log('Battle created:', newBattle.id);
 
       const { error: participantError } = await supabase
         .from('battle_participants')
@@ -157,10 +173,12 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
         });
 
       if (participantError) {
+        console.error('Participant error:', participantError);
         setSearching(false);
         return;
       }
 
+      console.log('Waiting for opponent...');
       setWaitingBattleId(newBattle.id);
     }
   };
@@ -176,6 +194,8 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
     setWaitingBattleId(null);
     waitingBattleIdRef.current = null;
   };
+
+  console.log('Searching state:', searching, 'Waiting battle:', waitingBattleId);
 
   if (searching) {
     return (
