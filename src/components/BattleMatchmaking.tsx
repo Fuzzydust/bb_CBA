@@ -22,6 +22,25 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
   useEffect(() => {
     if (!searching || !waitingBattleId) return;
 
+    const checkBattleStatus = async () => {
+      const { data } = await supabase
+        .from('battles')
+        .select('status')
+        .eq('id', waitingBattleId)
+        .maybeSingle();
+
+      if (data?.status === 'active') {
+        waitingBattleIdRef.current = null;
+        setSearching(false);
+        setWaitingBattleId(null);
+        onBattleStart(waitingBattleId);
+      }
+    };
+
+    checkBattleStatus();
+
+    const interval = setInterval(checkBattleStatus, 1000);
+
     const channel = supabase
       .channel('battle-updates')
       .on(
@@ -45,6 +64,7 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
       .subscribe();
 
     return () => {
+      clearInterval(interval);
       supabase.removeChannel(channel);
     };
   }, [searching, waitingBattleId, onBattleStart]);
