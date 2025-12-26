@@ -103,11 +103,18 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
       baseDamage = Math.floor(baseDamage * 1.5);
     }
 
+    let damage = 0;
     if (isAbility) {
-      return Math.max(1, baseDamage - Math.floor(defender.card.defense / 2));
+      damage = Math.max(1, baseDamage - Math.floor(defender.card.defense / 2));
     } else {
-      return Math.max(1, baseDamage - defender.card.defense);
+      damage = Math.max(1, baseDamage - defender.card.defense);
     }
+
+    if (defender.is_defending) {
+      damage = Math.floor(damage * 0.5);
+    }
+
+    return damage;
   };
 
   const checkTypeAdvantage = (attacker: ParticipantWithCard, defender: ParticipantWithCard) => {
@@ -126,9 +133,22 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
     if (actionType === 'attack') {
       damage = calculateDamage(myParticipant, opponentParticipant);
       logMessage = `${myParticipant.card.name} attacks for ${damage} damage!`;
+      if (opponentParticipant.is_defending) {
+        logMessage += ' (Reduced by defense!)';
+      }
       if (hasAdvantage) {
         logMessage += ' Super effective!';
       }
+
+      await supabase
+        .from('battle_participants')
+        .update({ is_defending: false })
+        .eq('id', myParticipant.id);
+
+      await supabase
+        .from('battle_participants')
+        .update({ is_defending: false })
+        .eq('id', opponentParticipant.id);
     } else if (actionType === 'ability') {
       if (myParticipant.has_used_ability) {
         setLoading(false);
@@ -136,16 +156,29 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
       }
       damage = calculateDamage(myParticipant, opponentParticipant, true);
       logMessage = `${myParticipant.card.name} uses ${myParticipant.card.special_ability} for ${damage} damage!`;
+      if (opponentParticipant.is_defending) {
+        logMessage += ' (Reduced by defense!)';
+      }
       if (hasAdvantage) {
         logMessage += ' Super effective!';
       }
 
       await supabase
         .from('battle_participants')
-        .update({ has_used_ability: true })
+        .update({ has_used_ability: true, is_defending: false })
         .eq('id', myParticipant.id);
+
+      await supabase
+        .from('battle_participants')
+        .update({ is_defending: false })
+        .eq('id', opponentParticipant.id);
     } else if (actionType === 'defend') {
       logMessage = `${myParticipant.card.name} takes a defensive stance!`;
+
+      await supabase
+        .from('battle_participants')
+        .update({ is_defending: true })
+        .eq('id', myParticipant.id);
     }
 
     const newOpponentHp = Math.max(0, opponentParticipant.current_hp - damage);
@@ -257,7 +290,15 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
               <div className="flex-1">
                 {myParticipant && (
                   <div className="space-y-2">
-                    <div className="text-sm text-slate-400 mb-2">Your Card</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm text-slate-400">Your Card</div>
+                      {myParticipant.is_defending && (
+                        <div className="flex items-center gap-1 bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs font-semibold border border-blue-500/50">
+                          <Shield className="w-3 h-3" />
+                          Defending
+                        </div>
+                      )}
+                    </div>
                     <CardDisplay card={myParticipant.card} currentHp={myParticipant.current_hp} inBattle />
                   </div>
                 )}
@@ -295,7 +336,15 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
               <div className="flex-1">
                 {opponentParticipant && (
                   <div className="space-y-2">
-                    <div className="text-sm text-slate-400 mb-2">Opponent</div>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm text-slate-400">Opponent</div>
+                      {opponentParticipant.is_defending && (
+                        <div className="flex items-center gap-1 bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs font-semibold border border-blue-500/50">
+                          <Shield className="w-3 h-3" />
+                          Defending
+                        </div>
+                      )}
+                    </div>
                     <CardDisplay card={opponentParticipant.card} currentHp={opponentParticipant.current_hp} inBattle />
                   </div>
                 )}

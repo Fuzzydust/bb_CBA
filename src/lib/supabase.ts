@@ -65,6 +65,7 @@ export interface BattleParticipant {
   current_hp: number;
   position: number;
   has_used_ability: boolean;
+  is_defending: boolean;
 }
 
 export interface BattleTurn {

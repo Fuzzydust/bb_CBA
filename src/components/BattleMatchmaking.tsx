@@ -40,6 +40,13 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
 
     return () => {
       supabase.removeChannel(channel);
+      if (waitingBattleId) {
+        supabase
+          .from('battles')
+          .delete()
+          .eq('id', waitingBattleId)
+          .eq('status', 'waiting');
+      }
     };
   }, [searching, waitingBattleId, onBattleStart]);
 
@@ -72,6 +79,7 @@ export default function BattleMatchmaking({ onBattleStart }: BattleMatchmakingPr
 
         if (participantError) {
           setSearching(false);
+          findOrCreateBattle();
           return;
         }
 
