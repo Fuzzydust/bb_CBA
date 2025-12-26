@@ -233,6 +233,7 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
         .eq('id', battleId);
     }
 
+    await fetchBattleData();
     setLoading(false);
   };
 
