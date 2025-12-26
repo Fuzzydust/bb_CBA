@@ -168,16 +168,6 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
         if (hasAdvantage) {
           logMessage += ' Super effective!';
         }
-
-        await supabase
-          .from('battle_participants')
-          .update({ is_defending: false })
-          .eq('id', myParticipant.id);
-
-        await supabase
-          .from('battle_participants')
-          .update({ is_defending: false })
-          .eq('id', opponentParticipant.id);
       } else if (actionType === 'ability') {
         if (myParticipant.has_used_ability) {
           setLoading(false);
@@ -191,7 +181,47 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
         if (hasAdvantage) {
           logMessage += ' Super effective!';
         }
+      } else if (actionType === 'defend') {
+        logMessage = `${myParticipant.card.name} takes a defensive stance!`;
+      }
 
+      const newOpponentHp = Math.max(0, opponentParticipant.current_hp - damage);
+
+      // Optimistic update: Update local state immediately
+      setParticipants(prev => prev.map(p => {
+        if (p.id === myParticipant.id) {
+          return {
+            ...p,
+            is_defending: actionType === 'defend',
+            has_used_ability: actionType === 'ability' ? true : p.has_used_ability,
+          };
+        }
+        if (p.id === opponentParticipant.id) {
+          return {
+            ...p,
+            current_hp: newOpponentHp,
+            is_defending: actionType === 'defend' ? p.is_defending : false,
+          };
+        }
+        return p;
+      }));
+
+      setIsMyTurn(false);
+      setBattle(prev => prev ? { ...prev, current_turn: opponentParticipant.id } : null);
+      setActionLog(prev => [logMessage, ...prev]);
+
+      // Now update the database
+      if (actionType === 'attack') {
+        await supabase
+          .from('battle_participants')
+          .update({ is_defending: false })
+          .eq('id', myParticipant.id);
+
+        await supabase
+          .from('battle_participants')
+          .update({ is_defending: false })
+          .eq('id', opponentParticipant.id);
+      } else if (actionType === 'ability') {
         await supabase
           .from('battle_participants')
           .update({ has_used_ability: true, is_defending: false })
@@ -202,15 +232,11 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           .update({ is_defending: false })
           .eq('id', opponentParticipant.id);
       } else if (actionType === 'defend') {
-        logMessage = `${myParticipant.card.name} takes a defensive stance!`;
-
         await supabase
           .from('battle_participants')
           .update({ is_defending: true })
           .eq('id', myParticipant.id);
       }
-
-      const newOpponentHp = Math.max(0, opponentParticipant.current_hp - damage);
 
       await supabase
         .from('battle_participants')
@@ -237,10 +263,8 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           turn_number: nextTurnNumber,
         });
 
-      setActionLog(prev => [logMessage, ...prev]);
-
       if (newOpponentHp <= 0) {
-        const { error: battleUpdateError } = await supabase
+        await supabase
           .from('battles')
           .update({
             status: 'completed',
@@ -249,24 +273,22 @@ export default function BattleArena({ battleId, onBattleEnd }: BattleArenaProps)
           })
           .eq('id', battleId);
 
-        if (battleUpdateError) {
-          console.error('Error updating battle status:', battleUpdateError);
-        }
+        setBattle(prev => prev ? {
+          ...prev,
+          status: 'completed',
+          winner_id: user?.id,
+          completed_at: new Date().toISOString(),
+        } : null);
       } else {
-        const { error: turnUpdateError } = await supabase
+        await supabase
           .from('battles')
           .update({ current_turn: opponentParticipant.id })
           .eq('id', battleId);
-
-        if (turnUpdateError) {
-          console.error('Error updating turn:', turnUpdateError);
-        }
       }
-
-      console.log('Move completed, fetching updated battle data...');
-      await fetchBattleData();
     } catch (error) {
       console.error('Error performing action:', error);
+      // On error, refetch to get the correct state
+      await fetchBattleData();
     } finally {
       setLoading(false);
     }
